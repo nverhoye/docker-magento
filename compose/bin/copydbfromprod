@@ -1,0 +1,37 @@
+#!/bin/bash
+# exit when any command fails
+set -e
+# shellcheck source=../env/db.env
+source env/db.env
+#shellcheck source=../env/magento.env
+source env/magento.env
+
+DUMP_FILENAME='dump.prd.sql'
+
+echo "[1/8] Download production database"
+magento-cloud db:dump -e production -p byjboicjj3sfg -r database -f $DUMP_FILENAME
+
+echo "[2/8] Rewrite TRIGGER CREATION"
+sed -i -- 's/\/\*!50003 CREATE\*\/ \/\*!50017 DEFINER=`byjboicjj3sfg`@`%`\*\/ \/\*!50003/CREATE/g' $DUMP_FILENAME
+sed -i -- 's/END \*\/;;/END ;;/g' $DUMP_FILENAME
+
+echo "[3/8] Replace byjboicjj3sfg reference name in dump"
+sed -i -- 's/byjboicjj3sfg/magento/g' $DUMP_FILENAME
+sed -i -- 's/CURRENT_USER/`magento`@`%`/g' $DUMP_FILENAME
+
+echo "[4/8] Push dump file to container"
+mv dump.prd.sql src
+bin/copytocontainer $DUMP_FILENAME
+
+echo "[5/8] Import database into container"
+bin/n98-magerun2 db:import $DUMP_FILENAME --drop
+
+echo "[6/8] Fix patch_list table (weird AmastyGroupedOptions issue)"
+bin/n98-magerun2 db:query 'INSERT INTO patch_list (patch_name) VALUES ("Amasty\\GroupedOptions\\Setup\\Patch\\DeclarativeSchemaApplyBefore\\RenameTables");'
+
+echo "[7/8] Set developer mode"
+bin/magento deploy:mode:set developer
+bin/magento security:recaptcha:disable-for-user-login
+
+echo "[8/8] Set local configurations"
+bin/magento app:config:import -n
