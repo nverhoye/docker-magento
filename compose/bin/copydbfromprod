@@ -12,11 +12,13 @@ echo "[1/8] Download production database"
 magento-cloud db:dump -e production -p byjboicjj3sfg -r database -f $DUMP_FILENAME
 
 echo "[2/8] Rewrite TRIGGER CREATION"
+# shellcheck disable=SC2016
 sed -i -- 's/\/\*!50003 CREATE\*\/ \/\*!50017 DEFINER=`byjboicjj3sfg`@`%`\*\/ \/\*!50003/CREATE/g' $DUMP_FILENAME
 sed -i -- 's/END \*\/;;/END ;;/g' $DUMP_FILENAME
 
 echo "[3/8] Replace byjboicjj3sfg reference name in dump"
 sed -i -- 's/byjboicjj3sfg/magento/g' $DUMP_FILENAME
+# shellcheck disable=SC2016
 sed -i -- 's/CURRENT_USER/`magento`@`%`/g' $DUMP_FILENAME
 
 echo "[4/8] Push dump file to container"
